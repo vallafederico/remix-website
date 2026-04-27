@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import * as assert from "remix/assert";
+import { describe, it } from "remix/test";
 import { parseCart, parsePhotos, parseProduct } from "./jam-storefront.server";
-
 describe("parseProduct", () => {
   it("parses valid product data", () => {
     let product = parseProduct({
@@ -9,54 +9,49 @@ describe("parseProduct", () => {
       productId: "gid://shopify/ProductVariant/456",
       availableForSale: true,
     });
-    expect(product).toEqual({
+    assert.deepEqual(product, {
       id: "gid://shopify/Product/123",
       price: "399.00",
       productId: "gid://shopify/ProductVariant/456",
       availableForSale: true,
     });
   });
-
   it("rejects invalid product data", () => {
-    expect(() => parseProduct({ id: "x" })).toThrow();
-    expect(() =>
+    assert.throws(() => parseProduct({ id: "x" }));
+    assert.throws(() =>
       parseProduct({
         id: 123,
         price: "1",
         productId: "p",
         availableForSale: true,
       }),
-    ).toThrow();
+    );
   });
 });
-
 describe("parseCart", () => {
   it("parses valid cart data", () => {
     let cart = parseCart({
       id: "gid://shopify/Cart/abc",
       checkoutUrl: "https://jam.remix.run/checkout/abc",
     });
-    expect(cart.checkoutUrl).toBe("https://jam.remix.run/checkout/abc");
+    assert.equal(cart.checkoutUrl, "https://jam.remix.run/checkout/abc");
   });
-
   it("rejects invalid checkoutUrl", () => {
-    expect(() =>
+    assert.throws(() =>
       parseCart({
         id: "cart-id",
         checkoutUrl: "not-a-valid-url",
       }),
-    ).toThrow();
+    );
   });
-
   it("rejects missing checkoutUrl", () => {
-    expect(() =>
+    assert.throws(() =>
       parseCart({
         id: "cart-id",
       }),
-    ).toThrow();
+    );
   });
 });
-
 describe("parsePhotos", () => {
   it("parses valid photos array", () => {
     let photos = parsePhotos([
@@ -72,13 +67,12 @@ describe("parsePhotos", () => {
         height: 300,
       },
     ]);
-    expect(photos).toHaveLength(2);
-    expect(photos[0].url).toBe("https://example.com/photo.jpg");
-    expect(photos[1].altText).toBe("Alt text");
+    assert.equal(photos.length, 2);
+    assert.equal(photos[0].url, "https://example.com/photo.jpg");
+    assert.equal(photos[1].altText, "Alt text");
   });
-
   it("rejects invalid url in photo", () => {
-    expect(() =>
+    assert.throws(() =>
       parsePhotos([
         {
           url: "not-a-url",
@@ -86,6 +80,6 @@ describe("parsePhotos", () => {
           height: 100,
         },
       ]),
-    ).toThrow();
+    );
   });
 });

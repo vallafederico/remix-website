@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import * as assert from "remix/assert";
+import { describe, it } from "remix/test";
 import { parseScheduleItems } from "./jam-schedule.server";
-
 describe("parseScheduleItems", () => {
   it("parses valid schedule items", () => {
     let raw = [
@@ -19,28 +19,23 @@ describe("parseScheduleItems", () => {
         bio: "Developer",
       },
     ];
-
     let result = parseScheduleItems(raw);
-    expect(result).toHaveLength(2);
-    expect(result[0]).toEqual({
+    assert.equal(result.length, 2);
+    assert.deepEqual(result[0], {
       time: "9:00 AM",
       title: "Keynote",
       description: "Opening talk",
       speaker: "Jane Doe",
-      imgFilename: undefined,
-      bio: undefined,
     });
-    expect(result[1].imgFilename).toBe("john.webp");
-    expect(result[1].bio).toBe("Developer");
+    assert.equal(result[1].imgFilename, "john.webp");
+    assert.equal(result[1].bio, "Developer");
   });
-
   it("rejects invalid shape - missing required fields", () => {
     let raw = [{ time: "9:00" }]; // missing title, description, speaker
-    expect(() => parseScheduleItems(raw)).toThrow();
+    assert.throws(() => parseScheduleItems(raw));
   });
-
   it("rejects non-array input", () => {
-    expect(() => parseScheduleItems({})).toThrow();
-    expect(() => parseScheduleItems("not an array")).toThrow();
+    assert.throws(() => parseScheduleItems({}));
+    assert.throws(() => parseScheduleItems("not an array"));
   });
 });

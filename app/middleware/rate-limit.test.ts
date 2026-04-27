@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import * as assert from "remix/assert";
 import { createRouter } from "remix/fetch-router";
+import { describe, it, type TestContext as RemixTestContext } from "remix/test";
 import { rateLimit } from "./rate-limit.ts";
 
 function createMockContext(
@@ -32,17 +33,27 @@ function createMockContext(
   };
 }
 
-function createNext(responseBody = "OK") {
-  return vi.fn(() => Promise.resolve(new Response(responseBody)));
+function useMockClock(t: RemixTestContext) {
+  let now = new Date("2026-01-01T00:00:00.000Z").getTime();
+  t.mock.method(Date, "now", () => now);
+  return {
+    advanceBy(ms: number) {
+      now += ms;
+    },
+  };
 }
 
-type TestContext = ReturnType<typeof createMockContext>;
+function createNext(t: RemixTestContext, responseBody = "OK") {
+  return t.mock.fn(() => Promise.resolve(new Response(responseBody)));
+}
+
+type RequestContext = ReturnType<typeof createMockContext>;
 type TestNext = ReturnType<typeof createNext>;
 type RateLimitMiddleware = ReturnType<typeof rateLimit>;
 
 function invokeRateLimit(
   middleware: RateLimitMiddleware,
-  context: TestContext,
+  context: RequestContext,
   next: TestNext,
 ) {
   return middleware(
@@ -52,18 +63,10 @@ function invokeRateLimit(
 }
 
 describe("rateLimit", () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it("returns 429 when limit is exceeded", async () => {
+  it("returns 429 when limit is exceeded", async (t) => {
+    useMockClock(t);
     let middleware = rateLimit({ max: 2, windowMs: 60_000 });
-    let next = createNext();
+    let next = createNext(t);
 
     await invokeRateLimit(
       middleware,
@@ -81,15 +84,16 @@ describe("rateLimit", () => {
       next,
     );
 
-    expect(next).toHaveBeenCalledTimes(2);
-    expect(result3?.status).toBe(429);
+    assert.equal(next.mock.calls.length, 2);
+    assert.equal(result3?.status, 429);
     let body = await result3?.text();
-    expect(body).toContain("Too Many Requests");
+    assert.ok(body?.includes("Too Many Requests"));
   });
 
-  it("sets a deterministic Retry-After header when rate limited", async () => {
+  it("sets a deterministic Retry-After header when rate limited", async (t) => {
+    let clock = useMockClock(t);
     let middleware = rateLimit({ max: 1, windowMs: 60_000 });
-    let next = createNext();
+    let next = createNext(t);
 
     await invokeRateLimit(
       middleware,
@@ -101,25 +105,27 @@ describe("rateLimit", () => {
       createMockContext({ forwardedFor: "172.16.0.1" }),
       next,
     );
-    vi.advanceTimersByTime(1000);
+    clock.advanceBy(1000);
     let oneSecondLaterResult = await invokeRateLimit(
       middleware,
       createMockContext({ forwardedFor: "172.16.0.1" }),
       next,
     );
 
-    expect(immediateResult?.headers.get("Retry-After")).toBe("60");
-    expect(oneSecondLaterResult?.headers.get("Retry-After")).toBe("59");
-    expect(immediateResult?.headers.get("Cache-Control")).toBe("no-store");
-    expect(immediateResult?.headers.get("Content-Type")).toBe(
+    assert.equal(immediateResult?.headers.get("Retry-After"), "60");
+    assert.equal(oneSecondLaterResult?.headers.get("Retry-After"), "59");
+    assert.equal(immediateResult?.headers.get("Cache-Control"), "no-store");
+    assert.equal(
+      immediateResult?.headers.get("Content-Type"),
       "text/plain; charset=utf-8",
     );
-    expect(immediateResult?.headers.get("X-Remix-Response")).toBe("yes");
+    assert.equal(immediateResult?.headers.get("X-Remix-Response"), "yes");
   });
 
-  it("tracks different IPs separately", async () => {
+  it("tracks different IPs separately", async (t) => {
+    useMockClock(t);
     let middleware = rateLimit({ max: 1, windowMs: 60_000 });
-    let next = createNext();
+    let next = createNext(t);
 
     await invokeRateLimit(
       middleware,
@@ -137,14 +143,15 @@ describe("rateLimit", () => {
       next,
     );
 
-    expect(resultIp1?.status).toBe(429);
-    expect(resultIp2?.status).toBe(200);
-    expect(next).toHaveBeenCalledTimes(2);
+    assert.equal(resultIp1?.status, 429);
+    assert.equal(resultIp2?.status, 200);
+    assert.equal(next.mock.calls.length, 2);
   });
 
-  it("uses first IP when x-forwarded-for has multiple values", async () => {
+  it("uses first IP when x-forwarded-for has multiple values", async (t) => {
+    useMockClock(t);
     let middleware = rateLimit({ max: 1, windowMs: 60_000 });
-    let next = createNext();
+    let next = createNext(t);
 
     await invokeRateLimit(
       middleware,
@@ -159,14 +166,15 @@ describe("rateLimit", () => {
       next,
     );
 
-    expect(result?.status).toBe(429);
-    expect(next).toHaveBeenCalledTimes(1);
+    assert.equal(result?.status, 429);
+    assert.equal(next.mock.calls.length, 1);
   });
 
-  it("resets count after window expires", async () => {
+  it("resets count after window expires", async (t) => {
+    let clock = useMockClock(t);
     let windowMs = 1000;
     let middleware = rateLimit({ max: 1, windowMs });
-    let next = createNext();
+    let next = createNext(t);
 
     await invokeRateLimit(
       middleware,
@@ -178,26 +186,27 @@ describe("rateLimit", () => {
       createMockContext({ forwardedFor: "10.0.0.5" }),
       next,
     );
-    expect(blocked?.status).toBe(429);
+    assert.equal(blocked?.status, 429);
 
-    vi.advanceTimersByTime(windowMs + 1);
+    clock.advanceBy(windowMs + 1);
 
     let allowed = await invokeRateLimit(
       middleware,
       createMockContext({ forwardedFor: "10.0.0.5" }),
       next,
     );
-    expect(allowed?.status).toBe(200);
-    expect(next).toHaveBeenCalledTimes(2);
+    assert.equal(allowed?.status, 200);
+    assert.equal(next.mock.calls.length, 2);
   });
 
-  it("supports skipping selected requests from rate limiting", async () => {
+  it("supports skipping selected requests from rate limiting", async (t) => {
+    useMockClock(t);
     let middleware = rateLimit({
       max: 1,
       windowMs: 60_000,
       skip: (context) => context.url.pathname === "/healthcheck",
     });
-    let next = createNext();
+    let next = createNext(t);
 
     await invokeRateLimit(
       middleware,
@@ -210,32 +219,34 @@ describe("rateLimit", () => {
       next,
     );
 
-    expect(second?.status).toBe(200);
-    expect(next).toHaveBeenCalledTimes(2);
+    assert.equal(second?.status, 200);
+    assert.equal(next.mock.calls.length, 2);
   });
 
-  it("supports skipping localhost requests from rate limiting", async () => {
+  it("supports skipping localhost requests from rate limiting", async (t) => {
+    useMockClock(t);
     let middleware = rateLimit({
       max: 1,
       windowMs: 60_000,
       skipLocalhost: true,
     });
-    let next = createNext();
+    let next = createNext(t);
 
     await invokeRateLimit(middleware, createMockContext(), next);
     let second = await invokeRateLimit(middleware, createMockContext(), next);
 
-    expect(second?.status).toBe(200);
-    expect(next).toHaveBeenCalledTimes(2);
+    assert.equal(second?.status, 200);
+    assert.equal(next.mock.calls.length, 2);
   });
 
-  it("still rate limits non-localhost requests when localhost skipping is enabled", async () => {
+  it("still rate limits non-localhost requests when localhost skipping is enabled", async (t) => {
+    useMockClock(t);
     let middleware = rateLimit({
       max: 1,
       windowMs: 60_000,
       skipLocalhost: true,
     });
-    let next = createNext();
+    let next = createNext(t);
 
     await invokeRateLimit(
       middleware,
@@ -248,11 +259,12 @@ describe("rateLimit", () => {
       next,
     );
 
-    expect(second?.status).toBe(429);
-    expect(next).toHaveBeenCalledTimes(1);
+    assert.equal(second?.status, 429);
+    assert.equal(next.mock.calls.length, 1);
   });
 
-  it("rate limits through a real router but skips healthcheck and assets", async () => {
+  it("rate limits through a real router but skips healthcheck and assets", async (t) => {
+    useMockClock(t);
     let router = createRouter({
       middleware: [
         rateLimit({
@@ -281,8 +293,8 @@ describe("rateLimit", () => {
       }),
     );
 
-    expect(healthcheckFirst.status).toBe(200);
-    expect(healthcheckSecond.status).toBe(200);
+    assert.equal(healthcheckFirst.status, 200);
+    assert.equal(healthcheckSecond.status, 200);
 
     let assetsFirst = await router.fetch(
       new Request("http://localhost/assets/app.js", {
@@ -295,8 +307,8 @@ describe("rateLimit", () => {
       }),
     );
 
-    expect(assetsFirst.status).toBe(200);
-    expect(assetsSecond.status).toBe(200);
+    assert.equal(assetsFirst.status, 200);
+    assert.equal(assetsSecond.status, 200);
 
     let docsFirst = await router.fetch(
       new Request("http://localhost/docs", {
@@ -309,7 +321,7 @@ describe("rateLimit", () => {
       }),
     );
 
-    expect(docsFirst.status).toBe(200);
-    expect(docsSecond.status).toBe(429);
+    assert.equal(docsFirst.status, 200);
+    assert.equal(docsSecond.status, 429);
   });
 });

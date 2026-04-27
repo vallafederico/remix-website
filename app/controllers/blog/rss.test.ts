@@ -1,7 +1,7 @@
-import { describe, it, expect } from "vitest";
+import * as assert from "remix/assert";
+import { describe, it } from "remix/test";
 import { CACHE_CONTROL } from "../../utils/cache-control";
 import { buildBlogRssResponse } from "./rss";
-
 describe("blog RSS route handler", () => {
   it("returns an RSS XML response with cache headers", async () => {
     let response = buildBlogRssResponse([
@@ -12,18 +12,18 @@ describe("blog RSS route handler", () => {
         date: new Date("2025-01-01T00:00:00.000Z"),
       },
     ]);
-
-    expect(response).toBeInstanceOf(Response);
-    expect(response.status).toBe(200);
-    expect(response.headers.get("Content-Type")).toBe("application/xml");
-    expect(response.headers.get("Cache-Control")).toBe(CACHE_CONTROL.DEFAULT);
-
+    assert.ok(response instanceof Response);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("Content-Type"), "application/xml");
+    assert.equal(response.headers.get("Cache-Control"), CACHE_CONTROL.DEFAULT);
     let xml = await response.text();
-    expect(xml).toContain("<rss");
-    expect(xml).toContain("<title>Remix Blog</title>");
-    expect(xml).toContain(
-      "<description>Thoughts about building excellent user experiences with Remix.</description>",
+    assert.ok(xml.includes("<rss"));
+    assert.ok(xml.includes("<title>Remix Blog</title>"));
+    assert.ok(
+      xml.includes(
+        "<description>Thoughts about building excellent user experiences with Remix.</description>",
+      ),
     );
-    expect(xml).toContain("<link>https://remix.run/blog/hello-world</link>");
+    assert.ok(xml.includes("<link>https://remix.run/blog/hello-world</link>"));
   });
 });

@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
+import * as assert from "remix/assert";
+import { afterEach, beforeEach, describe, it } from "remix/test";
 import { routes } from "../../routes";
 import actionsController from "./controller";
 
@@ -11,7 +11,6 @@ describe("Newsletter subscribe route", () => {
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
     process.env.CONVERTKIT_KEY = originalConvertKitKey;
   });
 
@@ -41,8 +40,8 @@ describe("Newsletter subscribe route", () => {
     let response = await submitNewsletter(
       new URLSearchParams({ email: "invalid-email" }),
     );
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), {
       ok: false,
       error: "Invalid Email",
     });
@@ -55,17 +54,17 @@ describe("Newsletter subscribe route", () => {
         tag: "not-a-number",
       }),
     );
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), {
       ok: false,
       error: "Invalid Tag",
     });
   });
 
-  it("returns success for a valid submission when ConvertKit succeeds", async () => {
-    let fetchSpy = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValue(new Response(JSON.stringify({}), { status: 200 }));
+  it("returns success for a valid submission when ConvertKit succeeds", async (t) => {
+    let fetchSpy = t.mock.method(globalThis, "fetch", () => {
+      return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
+    });
 
     let response = await submitNewsletter(
       new URLSearchParams({
@@ -74,20 +73,22 @@ describe("Newsletter subscribe route", () => {
       }),
     );
 
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
+    assert.equal(fetchSpy.mock.calls.length, 1);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
       ok: true,
       error: null,
     });
   });
 
-  it("returns a 500 when ConvertKit responds with an error", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ error: "ConvertKit says no" }), {
-        status: 200,
-      }),
-    );
+  it("returns a 500 when ConvertKit responds with an error", async (t) => {
+    t.mock.method(globalThis, "fetch", () => {
+      return Promise.resolve(
+        new Response(JSON.stringify({ error: "ConvertKit says no" }), {
+          status: 200,
+        }),
+      );
+    });
 
     let response = await submitNewsletter(
       new URLSearchParams({
@@ -95,8 +96,8 @@ describe("Newsletter subscribe route", () => {
       }),
     );
 
-    expect(response.status).toBe(500);
-    await expect(response.json()).resolves.toEqual({
+    assert.equal(response.status, 500);
+    assert.deepEqual(await response.json(), {
       ok: false,
       error: "ConvertKit says no",
     });
@@ -104,15 +105,14 @@ describe("Newsletter subscribe route", () => {
 
   it("returns a 500 when CONVERTKIT_KEY is missing", async () => {
     delete process.env.CONVERTKIT_KEY;
-
     let response = await submitNewsletter(
       new URLSearchParams({
         email: "hello@example.com",
       }),
     );
 
-    expect(response.status).toBe(500);
-    await expect(response.json()).resolves.toEqual({
+    assert.equal(response.status, 500);
+    assert.deepEqual(await response.json(), {
       ok: false,
       error: "Missing CONVERTKIT_KEY",
     });

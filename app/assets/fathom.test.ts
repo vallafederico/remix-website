@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import * as assert from "remix/assert";
+import { afterEach, describe, it } from "remix/test";
 import { initFathomAnalytics } from "./fathom";
 
 let originalWindow = globalThis.window;
@@ -8,27 +9,30 @@ afterEach(() => {
 });
 
 describe("initFathomAnalytics", () => {
-  it("does not load Fathom in development", () => {
-    let loadImpl = vi.fn();
+  it("does not load Fathom in development", (t) => {
+    let loadImpl = t.mock.fn();
     globalThis.window = {} as Window & typeof globalThis;
 
     initFathomAnalytics({ isDevelopment: true, loadImpl });
 
-    expect(loadImpl).not.toHaveBeenCalled();
+    assert.equal(loadImpl.mock.calls.length, 0);
   });
 
-  it("loads Fathom once outside development", () => {
-    let loadImpl = vi.fn();
+  it("loads Fathom once outside development", (t) => {
+    let loadImpl = t.mock.fn();
     globalThis.window = {} as Window & typeof globalThis;
 
     initFathomAnalytics({ isDevelopment: false, loadImpl });
     initFathomAnalytics({ isDevelopment: false, loadImpl });
 
-    expect(loadImpl).toHaveBeenCalledTimes(1);
-    expect(loadImpl).toHaveBeenCalledWith("IRVDGCHK", {
-      url: "https://cdn.usefathom.com/script.js",
-      spa: "history",
-      excludedDomains: ["localhost"],
-    });
+    assert.equal(loadImpl.mock.calls.length, 1);
+    assert.deepEqual(loadImpl.mock.calls[0]?.arguments, [
+      "IRVDGCHK",
+      {
+        url: "https://cdn.usefathom.com/script.js",
+        spa: "history",
+        excludedDomains: ["localhost"],
+      },
+    ]);
   });
 });
